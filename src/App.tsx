@@ -22,7 +22,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Material, Category, Transaction, DashboardStats } from './types';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'transactions'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'data-masuk'>('dashboard');
   const [materials, setMaterials] = useState<Material[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -99,10 +99,10 @@ export default function App() {
           />
           <NavItem 
             icon={<History size={20} />} 
-            label="Transaksi" 
-            active={activeTab === 'transactions'} 
+            label="Data Masuk" 
+            active={activeTab === 'data-masuk'} 
             collapsed={!isSidebarOpen}
-            onClick={() => setActiveTab('transactions')}
+            onClick={() => setActiveTab('data-masuk')}
           />
         </nav>
 
@@ -117,7 +117,7 @@ export default function App() {
       {/* Main Content */}
       <main className="flex-1 flex flex-col overflow-hidden">
         <header className="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-8">
-          <h2 className="text-lg font-semibold capitalize">{activeTab}</h2>
+          <h2 className="text-lg font-semibold capitalize">{activeTab.replace('-', ' ')}</h2>
           <div className="flex items-center gap-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
@@ -273,6 +273,48 @@ export default function App() {
                               </button>
                             </div>
                           </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </motion.div>
+            )}
+            {activeTab === 'data-masuk' && (
+              <motion.div 
+                key="data-masuk"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"
+              >
+                <div className="p-6 border-b border-slate-100">
+                  <h3 className="font-bold">Riwayat Data Masuk & Keluar</h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-100">
+                        <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">Bahan</th>
+                        <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">Tipe</th>
+                        <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">Jumlah</th>
+                        <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">Tanggal</th>
+                        <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">Catatan</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {stats?.recentTransactions.map((t) => (
+                        <tr key={t.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="px-6 py-4 text-sm font-medium">{t.material_name}</td>
+                          <td className="px-6 py-4">
+                            <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${
+                              t.type === 'IN' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'
+                            }`}>
+                              {t.type === 'IN' ? 'Masuk' : 'Keluar'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-sm font-bold">{t.quantity}</td>
+                          <td className="px-6 py-4 text-sm text-slate-500">{new Date(t.date).toLocaleString()}</td>
+                          <td className="px-6 py-4 text-sm text-slate-400 italic">{t.notes || '-'}</td>
                         </tr>
                       ))}
                     </tbody>
