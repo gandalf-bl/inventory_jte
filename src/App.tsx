@@ -21,13 +21,14 @@ import {
   Trash2,
   MapPin,
   Camera,
-  RefreshCw
+  RefreshCw,
+  Layers
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Material, Category, Transaction, DashboardStats, Location } from './types';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'data-masuk' | 'locations'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'data-masuk' | 'locations' | 'categories'>('dashboard');
   const [materials, setMaterials] = useState<Material[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
@@ -36,12 +37,53 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
   const [editingLocation, setEditingLocation] = useState<Location | null>(null);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isCameraActive, setIsCameraActive] = useState(false);
+  const [isCameraLoading, setIsCameraLoading] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const videoRef = React.useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    let stream: MediaStream | null = null;
+
+    const enableCamera = async () => {
+      if (isCameraActive && videoRef.current) {
+        setIsCameraLoading(true);
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: 'environment' } 
+          });
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            // Wait for video to be ready
+            videoRef.current.onloadedmetadata = () => {
+              setIsCameraLoading(false);
+            };
+            if (videoRef.current.readyState >= 1) {
+              setIsCameraLoading(false);
+            }
+          }
+        } catch (err) {
+          console.error("Error accessing camera:", err);
+          alert("Tidak dapat mengakses kamera. Pastikan izin kamera telah diberikan.");
+          setIsCameraActive(false);
+          setIsCameraLoading(false);
+        }
+      }
+    };
+
+    enableCamera();
+
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [isCameraActive]);
 
   const [newMaterial, setNewMaterial] = useState({
     name: '',
@@ -52,6 +94,37 @@ export default function App() {
     image: ''
   });
   const [newLocationName, setNewLocationName] = useState('');
+  const [newCategoryName, setNewCategoryName] = useState('');
+  
+  const [confirmConfig, setConfirmConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
+
+  const [alertConfig, setAlertConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+  });
+
+  const showAlert = (title: string, message: string) => {
+    setAlertConfig({ isOpen: true, title, message });
+  };
+
+  const showConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmConfig({ isOpen: true, title, message, onConfirm });
+  };
   
   useEffect(() => {
     fetchData();
@@ -107,44 +180,38 @@ export default function App() {
         setCapturedImage(null);
         setNewMaterial({ name: '', category_id: 1, unit: '', min_stock: 5, location: '', image: '' });
         fetchData();
+      } else {
+        const errorData = await response.json();
+        alert(`Gagal menyimpan: ${errorData.error || response.statusText}`);
       }
     } catch (error) {
       console.error("Error saving material:", error);
+      alert("Terjadi kesalahan koneksi saat menyimpan data.");
     }
   };
 
-  const startCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment' } 
-      });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        setIsCameraActive(true);
-      }
-    } catch (err) {
-      console.error("Error accessing camera:", err);
-      alert("Tidak dapat mengakses kamera. Pastikan izin kamera telah diberikan.");
-    }
+  const startCamera = () => {
+    setIsCameraActive(true);
   };
 
   const stopCamera = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach(track => track.stop());
-      videoRef.current.srcObject = null;
-      setIsCameraActive(false);
-    }
+    setIsCameraActive(false);
   };
 
   const capturePhoto = () => {
     if (videoRef.current) {
+      const video = videoRef.current;
+      if (video.readyState < 2) {
+        alert("Kamera belum siap, silakan tunggu sebentar.");
+        return;
+      }
+      
       const canvas = document.createElement('canvas');
-      canvas.width = videoRef.current.videoWidth;
-      canvas.height = videoRef.current.videoHeight;
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        ctx.drawImage(videoRef.current, 0, 0);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
         setCapturedImage(dataUrl);
         stopCamera();
@@ -153,16 +220,23 @@ export default function App() {
   };
 
   const handleDeleteMaterial = async (id: number) => {
+    console.log("handleDeleteMaterial called with ID:", id);
     if (!window.confirm('Apakah Anda yakin ingin menghapus bahan ini? Semua riwayat transaksi terkait juga akan dihapus.')) return;
     try {
       const response = await fetch(`/api/materials/${id}`, {
         method: 'DELETE'
       });
+      console.log("Delete material response status:", response.status);
       if (response.ok) {
         fetchData();
+      } else {
+        const err = await response.json();
+        console.error("Delete material error:", err);
+        alert(err.error || 'Gagal menghapus bahan');
       }
     } catch (error) {
       console.error("Error deleting material:", error);
+      alert("Terjadi kesalahan koneksi saat menghapus bahan.");
     }
   };
 
@@ -212,19 +286,27 @@ export default function App() {
   };
 
   const handleDeleteLocation = async (id: number) => {
+    console.log("handleDeleteLocation called with ID:", id);
     if (!window.confirm('Apakah Anda yakin ingin menghapus lokasi ini?')) return;
     try {
       const response = await fetch(`/api/locations/${id}`, {
         method: 'DELETE'
       });
+      console.log("Delete location response status:", response.status);
       if (response.ok) {
         fetchData();
       } else {
         const err = await response.json();
-        alert(err.error || 'Gagal menghapus lokasi');
+        console.error("Delete location error:", err);
+        if (err.details) {
+          alert(`${err.error}\n\n${err.details}`);
+        } else {
+          alert(err.error || 'Gagal menghapus lokasi');
+        }
       }
     } catch (error) {
       console.error("Error deleting location:", error);
+      alert("Terjadi kesalahan koneksi saat menghapus lokasi.");
     }
   };
 
@@ -238,6 +320,68 @@ export default function App() {
     setEditingLocation(null);
     setNewLocationName('');
     setIsLocationModalOpen(true);
+  };
+
+  const handleAddCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const url = editingCategory ? `/api/categories/${editingCategory.id}` : '/api/categories';
+      const method = editingCategory ? 'PUT' : 'POST';
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newCategoryName })
+      });
+      if (response.ok) {
+        setIsCategoryModalOpen(false);
+        setEditingCategory(null);
+        setNewCategoryName('');
+        fetchData();
+      } else {
+        const err = await response.json();
+        alert(err.error || 'Gagal menyimpan kategori');
+      }
+    } catch (error) {
+      console.error("Error saving category:", error);
+      alert("Terjadi kesalahan koneksi saat menyimpan kategori.");
+    }
+  };
+
+  const handleDeleteCategory = async (id: number) => {
+    console.log("handleDeleteCategory called with ID:", id);
+    if (!window.confirm('Hapus kategori ini?')) return;
+    try {
+      const response = await fetch(`/api/categories/${id}`, {
+        method: 'DELETE'
+      });
+      console.log("Delete category response status:", response.status);
+      if (response.ok) {
+        fetchData();
+      } else {
+        const err = await response.json();
+        console.error("Delete category error:", err);
+        if (err.details) {
+          alert(`${err.error}\n\n${err.details}`);
+        } else {
+          alert(err.error || 'Gagal menghapus kategori');
+        }
+      }
+    } catch (error) {
+      console.error("Error deleting category:", error);
+      alert("Terjadi kesalahan koneksi saat menghapus kategori.");
+    }
+  };
+
+  const openCategoryEditModal = (cat: Category) => {
+    setEditingCategory(cat);
+    setNewCategoryName(cat.name);
+    setIsCategoryModalOpen(true);
+  };
+
+  const openCategoryAddModal = () => {
+    setEditingCategory(null);
+    setNewCategoryName('');
+    setIsCategoryModalOpen(true);
   };
 
   const filteredMaterials = materials.filter(m => 
@@ -289,6 +433,13 @@ export default function App() {
             active={activeTab === 'locations'} 
             collapsed={!isSidebarOpen}
             onClick={() => setActiveTab('locations')}
+          />
+          <NavItem 
+            icon={<Layers size={20} />} 
+            label="Kategori" 
+            active={activeTab === 'categories'} 
+            collapsed={!isSidebarOpen}
+            onClick={() => setActiveTab('categories')}
           />
         </nav>
 
@@ -599,6 +750,59 @@ export default function App() {
                 </div>
               </motion.div>
             )}
+            {activeTab === 'categories' && (
+              <motion.div 
+                key="categories"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"
+              >
+                <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                  <h3 className="font-bold">Daftar Kategori Bahan</h3>
+                  <button 
+                    onClick={openCategoryAddModal}
+                    className="bg-slate-900 text-white px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-slate-800 transition-colors"
+                  >
+                    <Plus size={16} /> Tambah Kategori
+                  </button>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-100">
+                        <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">Nama Kategori</th>
+                        <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {categories.map((cat) => (
+                        <tr key={cat.id} className="hover:bg-slate-50 transition-colors group">
+                          <td className="px-6 py-4 text-sm font-medium">{cat.name}</td>
+                          <td className="px-6 py-4">
+                            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button 
+                                onClick={() => openCategoryEditModal(cat)}
+                                className="p-1.5 hover:bg-blue-50 text-blue-600 rounded-lg transition-colors"
+                                title="Edit Kategori"
+                              >
+                                <Edit2 size={16} />
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteCategory(cat.id)}
+                                className="p-1.5 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors"
+                                title="Hapus Kategori"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </motion.div>
+            )}
           </AnimatePresence>
         </div>
       </main>
@@ -646,9 +850,16 @@ export default function App() {
                         <video 
                           ref={videoRef} 
                           autoPlay 
+                          muted
                           playsInline 
                           className="absolute inset-0 w-full h-full object-cover"
                         />
+                        {isCameraLoading && (
+                          <div className="absolute inset-0 bg-slate-100 flex flex-col items-center justify-center gap-3">
+                            <RefreshCw size={32} className="text-emerald-500 animate-spin" />
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Menyiapkan Kamera...</p>
+                          </div>
+                        )}
                         <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4">
                           <button 
                             type="button"
@@ -859,6 +1070,55 @@ export default function App() {
                     className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 rounded-2xl shadow-lg shadow-emerald-500/20 transition-all"
                   >
                     {editingLocation ? 'Update Lokasi' : 'Simpan Lokasi'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Add/Edit Category Modal */}
+      <AnimatePresence>
+        {isCategoryModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsCategoryModalOpen(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                <h3 className="font-bold text-lg">{editingCategory ? 'Edit Kategori' : 'Tambah Kategori Baru'}</h3>
+                <button onClick={() => setIsCategoryModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                  <X size={20} />
+                </button>
+              </div>
+              <form onSubmit={handleAddCategory} className="p-6 space-y-4">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Nama Kategori</label>
+                  <input 
+                    required
+                    type="text" 
+                    placeholder="Contoh: Komponen, Alat, Kabel..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                  />
+                </div>
+                <div className="pt-4">
+                  <button 
+                    type="submit"
+                    className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 rounded-2xl shadow-lg shadow-emerald-500/20 transition-all"
+                  >
+                    {editingCategory ? 'Update Kategori' : 'Simpan Kategori'}
                   </button>
                 </div>
               </form>
