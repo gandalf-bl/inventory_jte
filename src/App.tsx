@@ -16,18 +16,42 @@ import {
   Menu,
   X,
   ChevronRight,
-  Database
+  Database,
+  Edit2,
+  Trash2,
+  MapPin,
+  Camera,
+  RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Material, Category, Transaction, DashboardStats } from './types';
+import { Material, Category, Transaction, DashboardStats, Location } from './types';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'data-masuk'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'data-masuk' | 'locations'>('dashboard');
   const [materials, setMaterials] = useState<Material[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+  const [editingMaterial, setEditingMaterial] = useState<Material | null>(null);
+  const [editingLocation, setEditingLocation] = useState<Location | null>(null);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const videoRef = React.useRef<HTMLVideoElement>(null);
+
+  const [newMaterial, setNewMaterial] = useState({
+    name: '',
+    category_id: 1,
+    unit: '',
+    min_stock: 5,
+    location: '',
+    image: ''
+  });
+  const [newLocationName, setNewLocationName] = useState('');
   
   useEffect(() => {
     fetchData();
@@ -35,14 +59,16 @@ export default function App() {
 
   const fetchData = async () => {
     try {
-      const [mRes, cRes, sRes] = await Promise.all([
+      const [mRes, cRes, sRes, lRes] = await Promise.all([
         fetch('/api/materials'),
         fetch('/api/categories'),
-        fetch('/api/stats')
+        fetch('/api/stats'),
+        fetch('/api/locations')
       ]);
       setMaterials(await mRes.json());
       setCategories(await cRes.json());
       setStats(await sRes.json());
+      setLocations(await lRes.json());
     } catch (error) {
       console.error("Error fetching data:", error);
     }
@@ -59,6 +85,159 @@ export default function App() {
     } catch (error) {
       console.error("Error processing transaction:", error);
     }
+  };
+
+  const handleAddMaterial = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const url = editingMaterial ? `/api/materials/${editingMaterial.id}` : '/api/materials';
+      const method = editingMaterial ? 'PUT' : 'POST';
+      
+      const payload = { ...newMaterial, image: capturedImage || newMaterial.image };
+
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (response.ok) {
+        setIsAddModalOpen(false);
+        setEditingMaterial(null);
+        setShowSuggestions(false);
+        setCapturedImage(null);
+        setNewMaterial({ name: '', category_id: 1, unit: '', min_stock: 5, location: '', image: '' });
+        fetchData();
+      }
+    } catch (error) {
+      console.error("Error saving material:", error);
+    }
+  };
+
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'environment' } 
+      });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        setIsCameraActive(true);
+      }
+    } catch (err) {
+      console.error("Error accessing camera:", err);
+      alert("Tidak dapat mengakses kamera. Pastikan izin kamera telah diberikan.");
+    }
+  };
+
+  const stopCamera = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+      setIsCameraActive(false);
+    }
+  };
+
+  const capturePhoto = () => {
+    if (videoRef.current) {
+      const canvas = document.createElement('canvas');
+      canvas.width = videoRef.current.videoWidth;
+      canvas.height = videoRef.current.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(videoRef.current, 0, 0);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+        setCapturedImage(dataUrl);
+        stopCamera();
+      }
+    }
+  };
+
+  const handleDeleteMaterial = async (id: number) => {
+    if (!window.confirm('Apakah Anda yakin ingin menghapus bahan ini? Semua riwayat transaksi terkait juga akan dihapus.')) return;
+    try {
+      const response = await fetch(`/api/materials/${id}`, {
+        method: 'DELETE'
+      });
+      if (response.ok) {
+        fetchData();
+      }
+    } catch (error) {
+      console.error("Error deleting material:", error);
+    }
+  };
+
+  const openEditModal = (material: Material) => {
+    setEditingMaterial(material);
+    setShowSuggestions(false);
+    setCapturedImage(material.image || null);
+    setNewMaterial({
+      name: material.name,
+      category_id: material.category_id,
+      unit: material.unit,
+      min_stock: material.min_stock,
+      location: material.location,
+      image: material.image || ''
+    });
+    setIsAddModalOpen(true);
+  };
+
+  const openAddModal = () => {
+    setEditingMaterial(null);
+    setShowSuggestions(false);
+    setCapturedImage(null);
+    setNewMaterial({ name: '', category_id: 1, unit: '', min_stock: 5, location: '', image: '' });
+    setIsAddModalOpen(true);
+  };
+
+  const handleSaveLocation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const url = editingLocation ? `/api/locations/${editingLocation.id}` : '/api/locations';
+      const method = editingLocation ? 'PUT' : 'POST';
+      
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newLocationName })
+      });
+      if (response.ok) {
+        setIsLocationModalOpen(false);
+        setEditingLocation(null);
+        setNewLocationName('');
+        fetchData();
+      }
+    } catch (error) {
+      console.error("Error saving location:", error);
+    }
+  };
+
+  const handleDeleteLocation = async (id: number) => {
+    if (!window.confirm('Apakah Anda yakin ingin menghapus lokasi ini?')) return;
+    try {
+      const response = await fetch(`/api/locations/${id}`, {
+        method: 'DELETE'
+      });
+      if (response.ok) {
+        fetchData();
+      } else {
+        const err = await response.json();
+        alert(err.error || 'Gagal menghapus lokasi');
+      }
+    } catch (error) {
+      console.error("Error deleting location:", error);
+    }
+  };
+
+  const openLocationEditModal = (loc: Location) => {
+    setEditingLocation(loc);
+    setNewLocationName(loc.name);
+    setIsLocationModalOpen(true);
+  };
+
+  const openLocationAddModal = () => {
+    setEditingLocation(null);
+    setNewLocationName('');
+    setIsLocationModalOpen(true);
   };
 
   const filteredMaterials = materials.filter(m => 
@@ -103,6 +282,13 @@ export default function App() {
             active={activeTab === 'data-masuk'} 
             collapsed={!isSidebarOpen}
             onClick={() => setActiveTab('data-masuk')}
+          />
+          <NavItem 
+            icon={<MapPin size={20} />} 
+            label="Lokasi" 
+            active={activeTab === 'locations'} 
+            collapsed={!isSidebarOpen}
+            onClick={() => setActiveTab('locations')}
           />
         </nav>
 
@@ -189,9 +375,18 @@ export default function App() {
                     <div className="space-y-4">
                       {materials.filter(m => m.stock <= m.min_stock).slice(0, 5).map((m) => (
                         <div key={m.id} className="flex items-center justify-between p-3 bg-amber-50 rounded-xl border border-amber-100">
-                          <div>
-                            <p className="text-sm font-medium">{m.name}</p>
-                            <p className="text-[10px] text-amber-600">Sisa: {m.stock} {m.unit}</p>
+                          <div className="flex items-center gap-3">
+                            {m.image ? (
+                              <img src={m.image} alt={m.name} className="w-10 h-10 rounded-lg object-cover border border-amber-200" referrerPolicy="no-referrer" />
+                            ) : (
+                              <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center text-amber-400">
+                                <Package size={20} />
+                              </div>
+                            )}
+                            <div>
+                              <p className="text-sm font-medium">{m.name}</p>
+                              <p className="text-[10px] text-amber-600">Sisa: {m.stock} {m.unit}</p>
+                            </div>
                           </div>
                           <div className="text-right">
                             <p className="text-[10px] text-slate-400 uppercase">Min: {m.min_stock}</p>
@@ -219,7 +414,10 @@ export default function App() {
               >
                 <div className="p-6 border-b border-slate-100 flex justify-between items-center">
                   <h3 className="font-bold">Daftar Bahan Praktik</h3>
-                  <button className="bg-slate-900 text-white px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-slate-800 transition-colors">
+                  <button 
+                    onClick={openAddModal}
+                    className="bg-slate-900 text-white px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-slate-800 transition-colors"
+                  >
                     <Plus size={16} /> Tambah Bahan
                   </button>
                 </div>
@@ -238,8 +436,19 @@ export default function App() {
                       {filteredMaterials.map((m) => (
                         <tr key={m.id} className="hover:bg-slate-50 transition-colors group">
                           <td className="px-6 py-4">
-                            <p className="text-sm font-medium">{m.name}</p>
-                            <p className="text-[10px] text-slate-400">{m.unit}</p>
+                            <div className="flex items-center gap-3">
+                              {m.image ? (
+                                <img src={m.image} alt={m.name} className="w-10 h-10 rounded-lg object-cover border border-slate-200" referrerPolicy="no-referrer" />
+                              ) : (
+                                <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400">
+                                  <Package size={20} />
+                                </div>
+                              )}
+                              <div>
+                                <p className="text-sm font-medium">{m.name}</p>
+                                <p className="text-[10px] text-slate-400">{m.unit}</p>
+                              </div>
+                            </div>
                           </td>
                           <td className="px-6 py-4">
                             <span className="px-2 py-1 bg-slate-100 rounded-md text-[10px] font-medium text-slate-600">
@@ -270,6 +479,21 @@ export default function App() {
                                 title="Kurangi Stok"
                               >
                                 <ArrowUpRight size={16} />
+                              </button>
+                              <div className="w-px h-4 bg-slate-200 self-center mx-1" />
+                              <button 
+                                onClick={() => openEditModal(m)}
+                                className="p-1.5 hover:bg-blue-50 text-blue-600 rounded-lg transition-colors"
+                                title="Edit Bahan"
+                              >
+                                <Edit2 size={16} />
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteMaterial(m.id)}
+                                className="p-1.5 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors"
+                                title="Hapus Bahan"
+                              >
+                                <Trash2 size={16} />
                               </button>
                             </div>
                           </td>
@@ -322,9 +546,326 @@ export default function App() {
                 </div>
               </motion.div>
             )}
+            {activeTab === 'locations' && (
+              <motion.div 
+                key="locations"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"
+              >
+                <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                  <h3 className="font-bold">Daftar Lokasi Penyimpanan</h3>
+                  <button 
+                    onClick={openLocationAddModal}
+                    className="bg-slate-900 text-white px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 hover:bg-slate-800 transition-colors"
+                  >
+                    <Plus size={16} /> Tambah Lokasi
+                  </button>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-100">
+                        <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">Nama Lokasi</th>
+                        <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {locations.map((loc) => (
+                        <tr key={loc.id} className="hover:bg-slate-50 transition-colors group">
+                          <td className="px-6 py-4 text-sm font-medium">{loc.name}</td>
+                          <td className="px-6 py-4">
+                            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button 
+                                onClick={() => openLocationEditModal(loc)}
+                                className="p-1.5 hover:bg-blue-50 text-blue-600 rounded-lg transition-colors"
+                                title="Edit Lokasi"
+                              >
+                                <Edit2 size={16} />
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteLocation(loc.id)}
+                                className="p-1.5 hover:bg-rose-50 text-rose-600 rounded-lg transition-colors"
+                                title="Hapus Lokasi"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </motion.div>
+            )}
           </AnimatePresence>
         </div>
       </main>
+
+      {/* Add Material Modal */}
+      <AnimatePresence>
+        {isAddModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => {
+                setIsAddModalOpen(false);
+                setShowSuggestions(false);
+              }}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                <h3 className="font-bold text-lg">{editingMaterial ? 'Edit Bahan' : 'Tambah Bahan Baru'}</h3>
+                <button 
+                  onClick={() => {
+                    setIsAddModalOpen(false);
+                    setShowSuggestions(false);
+                    stopCamera();
+                  }} 
+                  className="text-slate-400 hover:text-slate-600"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <form onSubmit={handleAddMaterial} className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                {/* Photo Capture Section */}
+                <div className="space-y-2">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">Foto Barang</label>
+                  <div className="relative aspect-video bg-slate-100 rounded-2xl overflow-hidden border-2 border-dashed border-slate-200 flex flex-col items-center justify-center group">
+                    {isCameraActive ? (
+                      <>
+                        <video 
+                          ref={videoRef} 
+                          autoPlay 
+                          playsInline 
+                          className="absolute inset-0 w-full h-full object-cover"
+                        />
+                        <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-4">
+                          <button 
+                            type="button"
+                            onClick={capturePhoto}
+                            className="bg-emerald-500 text-white p-3 rounded-full shadow-lg hover:bg-emerald-600 transition-all"
+                          >
+                            <Camera size={24} />
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={stopCamera}
+                            className="bg-white text-slate-600 p-3 rounded-full shadow-lg hover:bg-slate-100 transition-all"
+                          >
+                            <X size={24} />
+                          </button>
+                        </div>
+                      </>
+                    ) : capturedImage ? (
+                      <>
+                        <img src={capturedImage} alt="Preview" className="absolute inset-0 w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
+                          <button 
+                            type="button"
+                            onClick={startCamera}
+                            className="bg-white text-slate-900 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2"
+                          >
+                            <RefreshCw size={16} /> Ambil Ulang
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => setCapturedImage(null)}
+                            className="bg-rose-500 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2"
+                          >
+                            <Trash2 size={16} /> Hapus
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <button 
+                        type="button"
+                        onClick={startCamera}
+                        className="flex flex-col items-center gap-2 text-slate-400 hover:text-emerald-500 transition-colors"
+                      >
+                        <Camera size={48} />
+                        <span className="text-xs font-bold uppercase tracking-wider">Ambil Foto</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Nama Bahan</label>
+                  <input 
+                    required
+                    type="text" 
+                    autoComplete="off"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                    value={newMaterial.name}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setNewMaterial({...newMaterial, name: val});
+                      setShowSuggestions(val.length > 0);
+                    }}
+                    onFocus={() => {
+                      if (newMaterial.name.length > 0) setShowSuggestions(true);
+                    }}
+                    onBlur={() => {
+                      // Small delay to allow clicking a suggestion
+                      setTimeout(() => setShowSuggestions(false), 200);
+                    }}
+                  />
+                  
+                  <AnimatePresence>
+                    {showSuggestions && (
+                      <motion.div 
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="absolute z-10 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto"
+                      >
+                        {materials
+                          .filter(m => m.name.toLowerCase().includes(newMaterial.name.toLowerCase()))
+                          .map((m, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              className="w-full text-left px-4 py-2 text-sm hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-none"
+                              onClick={() => {
+                                setNewMaterial({...newMaterial, name: m.name});
+                                setShowSuggestions(false);
+                              }}
+                            >
+                              <span className="font-medium">{m.name}</span>
+                              <span className="ml-2 text-[10px] text-slate-400 uppercase tracking-wider">{m.category_name}</span>
+                            </button>
+                          ))}
+                        {materials.filter(m => m.name.toLowerCase().includes(newMaterial.name.toLowerCase())).length === 0 && (
+                          <div className="px-4 py-3 text-xs text-slate-400 italic">
+                            Bahan baru (belum ada di database)
+                          </div>
+                        )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Kategori</label>
+                    <select 
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                      value={newMaterial.category_id}
+                      onChange={(e) => setNewMaterial({...newMaterial, category_id: parseInt(e.target.value)})}
+                    >
+                      {categories.map(cat => (
+                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Satuan</label>
+                    <input 
+                      required
+                      type="text" 
+                      placeholder="Pcs, Set, Unit..."
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                      value={newMaterial.unit}
+                      onChange={(e) => setNewMaterial({...newMaterial, unit: e.target.value})}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Stok Minimal</label>
+                    <input 
+                      required
+                      type="number" 
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                      value={newMaterial.min_stock}
+                      onChange={(e) => setNewMaterial({...newMaterial, min_stock: parseInt(e.target.value)})}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Lokasi</label>
+                    <select 
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                      value={newMaterial.location}
+                      onChange={(e) => setNewMaterial({...newMaterial, location: e.target.value})}
+                    >
+                      <option value="">Pilih Lokasi</option>
+                      {locations.map(loc => (
+                        <option key={loc.id} value={loc.name}>{loc.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="pt-4">
+                  <button 
+                    type="submit"
+                    className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 rounded-2xl shadow-lg shadow-emerald-500/20 transition-all"
+                  >
+                    {editingMaterial ? 'Update Bahan' : 'Simpan Bahan'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Add/Edit Location Modal */}
+      <AnimatePresence>
+        {isLocationModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsLocationModalOpen(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden"
+            >
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                <h3 className="font-bold text-lg">{editingLocation ? 'Edit Lokasi' : 'Tambah Lokasi Baru'}</h3>
+                <button onClick={() => setIsLocationModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                  <X size={20} />
+                </button>
+              </div>
+              <form onSubmit={handleSaveLocation} className="p-6 space-y-4">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Nama Lokasi</label>
+                  <input 
+                    required
+                    type="text" 
+                    placeholder="Contoh: Rak D1, Lemari C..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                    value={newLocationName}
+                    onChange={(e) => setNewLocationName(e.target.value)}
+                  />
+                </div>
+                <div className="pt-4">
+                  <button 
+                    type="submit"
+                    className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 rounded-2xl shadow-lg shadow-emerald-500/20 transition-all"
+                  >
+                    {editingLocation ? 'Update Lokasi' : 'Simpan Lokasi'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

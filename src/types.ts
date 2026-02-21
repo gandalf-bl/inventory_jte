@@ -3,6 +3,11 @@ export interface Category {
   name: string;
 }
 
+export interface Location {
+  id: number;
+  name: string;
+}
+
 export interface Material {
   id: number;
   name: string;
@@ -12,6 +17,7 @@ export interface Material {
   stock: number;
   min_stock: number;
   location: string;
+  image?: string;
 }
 
 export interface Transaction {

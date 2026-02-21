@@ -1,5 +1,5 @@
 {
   "name": "Inventory Elektro Polnes",
   "description": "Sistem Manajemen Inventaris Bahan Praktik Jurusan Teknik Elektro Politeknik Negeri Samarinda",
-  "requestFramePermissions": []
+  "requestFramePermissions": ["camera"]
 }
