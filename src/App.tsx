@@ -69,7 +69,7 @@ export default function App() {
           }
         } catch (err) {
           console.error("Error accessing camera:", err);
-          alert("Tidak dapat mengakses kamera. Pastikan izin kamera telah diberikan.");
+          showAlert("Akses Kamera Gagal", "Tidak dapat mengakses kamera. Pastikan izin kamera telah diberikan.");
           setIsCameraActive(false);
           setIsCameraLoading(false);
         }
@@ -182,11 +182,11 @@ export default function App() {
         fetchData();
       } else {
         const errorData = await response.json();
-        alert(`Gagal menyimpan: ${errorData.error || response.statusText}`);
+        showAlert("Gagal Menyimpan", `Gagal menyimpan: ${errorData.error || response.statusText}`);
       }
     } catch (error) {
       console.error("Error saving material:", error);
-      alert("Terjadi kesalahan koneksi saat menyimpan data.");
+      showAlert("Kesalahan Koneksi", "Terjadi kesalahan koneksi saat menyimpan data.");
     }
   };
 
@@ -202,7 +202,7 @@ export default function App() {
     if (videoRef.current) {
       const video = videoRef.current;
       if (video.readyState < 2) {
-        alert("Kamera belum siap, silakan tunggu sebentar.");
+        showAlert("Kamera Belum Siap", "Kamera belum siap, silakan tunggu sebentar.");
         return;
       }
       
@@ -221,23 +221,28 @@ export default function App() {
 
   const handleDeleteMaterial = async (id: number) => {
     console.log("handleDeleteMaterial called with ID:", id);
-    if (!window.confirm('Apakah Anda yakin ingin menghapus bahan ini? Semua riwayat transaksi terkait juga akan dihapus.')) return;
-    try {
-      const response = await fetch(`/api/materials/${id}`, {
-        method: 'DELETE'
-      });
-      console.log("Delete material response status:", response.status);
-      if (response.ok) {
-        fetchData();
-      } else {
-        const err = await response.json();
-        console.error("Delete material error:", err);
-        alert(err.error || 'Gagal menghapus bahan');
+    showConfirm(
+      "Hapus Bahan", 
+      "Apakah Anda yakin ingin menghapus bahan ini? Semua riwayat transaksi terkait juga akan dihapus.",
+      async () => {
+        try {
+          const response = await fetch(`/api/materials/${id}`, {
+            method: 'DELETE'
+          });
+          console.log("Delete material response status:", response.status);
+          if (response.ok) {
+            fetchData();
+          } else {
+            const err = await response.json();
+            console.error("Delete material error:", err);
+            showAlert("Gagal Menghapus", err.error || 'Gagal menghapus bahan');
+          }
+        } catch (error) {
+          console.error("Error deleting material:", error);
+          showAlert("Kesalahan Koneksi", "Terjadi kesalahan koneksi saat menghapus bahan.");
+        }
       }
-    } catch (error) {
-      console.error("Error deleting material:", error);
-      alert("Terjadi kesalahan koneksi saat menghapus bahan.");
-    }
+    );
   };
 
   const openEditModal = (material: Material) => {
@@ -287,27 +292,32 @@ export default function App() {
 
   const handleDeleteLocation = async (id: number) => {
     console.log("handleDeleteLocation called with ID:", id);
-    if (!window.confirm('Apakah Anda yakin ingin menghapus lokasi ini?')) return;
-    try {
-      const response = await fetch(`/api/locations/${id}`, {
-        method: 'DELETE'
-      });
-      console.log("Delete location response status:", response.status);
-      if (response.ok) {
-        fetchData();
-      } else {
-        const err = await response.json();
-        console.error("Delete location error:", err);
-        if (err.details) {
-          alert(`${err.error}\n\n${err.details}`);
-        } else {
-          alert(err.error || 'Gagal menghapus lokasi');
+    showConfirm(
+      "Hapus Lokasi",
+      "Apakah Anda yakin ingin menghapus lokasi ini?",
+      async () => {
+        try {
+          const response = await fetch(`/api/locations/${id}`, {
+            method: 'DELETE'
+          });
+          console.log("Delete location response status:", response.status);
+          if (response.ok) {
+            fetchData();
+          } else {
+            const err = await response.json();
+            console.error("Delete location error:", err);
+            if (err.details) {
+              showAlert("Gagal Menghapus", `${err.error}\n\n${err.details}`);
+            } else {
+              showAlert("Gagal Menghapus", err.error || 'Gagal menghapus lokasi');
+            }
+          }
+        } catch (error) {
+          console.error("Error deleting location:", error);
+          showAlert("Kesalahan Koneksi", "Terjadi kesalahan koneksi saat menghapus lokasi.");
         }
       }
-    } catch (error) {
-      console.error("Error deleting location:", error);
-      alert("Terjadi kesalahan koneksi saat menghapus lokasi.");
-    }
+    );
   };
 
   const openLocationEditModal = (loc: Location) => {
@@ -339,37 +349,42 @@ export default function App() {
         fetchData();
       } else {
         const err = await response.json();
-        alert(err.error || 'Gagal menyimpan kategori');
+        showAlert("Gagal Menyimpan", err.error || 'Gagal menyimpan kategori');
       }
     } catch (error) {
       console.error("Error saving category:", error);
-      alert("Terjadi kesalahan koneksi saat menyimpan kategori.");
+      showAlert("Kesalahan Koneksi", "Terjadi kesalahan koneksi saat menyimpan kategori.");
     }
   };
 
   const handleDeleteCategory = async (id: number) => {
     console.log("handleDeleteCategory called with ID:", id);
-    if (!window.confirm('Hapus kategori ini?')) return;
-    try {
-      const response = await fetch(`/api/categories/${id}`, {
-        method: 'DELETE'
-      });
-      console.log("Delete category response status:", response.status);
-      if (response.ok) {
-        fetchData();
-      } else {
-        const err = await response.json();
-        console.error("Delete category error:", err);
-        if (err.details) {
-          alert(`${err.error}\n\n${err.details}`);
-        } else {
-          alert(err.error || 'Gagal menghapus kategori');
+    showConfirm(
+      "Hapus Kategori",
+      "Hapus kategori ini?",
+      async () => {
+        try {
+          const response = await fetch(`/api/categories/${id}`, {
+            method: 'DELETE'
+          });
+          console.log("Delete category response status:", response.status);
+          if (response.ok) {
+            fetchData();
+          } else {
+            const err = await response.json();
+            console.error("Delete category error:", err);
+            if (err.details) {
+              showAlert("Gagal Menghapus", `${err.error}\n\n${err.details}`);
+            } else {
+              showAlert("Gagal Menghapus", err.error || 'Gagal menghapus kategori');
+            }
+          }
+        } catch (error) {
+          console.error("Error deleting category:", error);
+          showAlert("Kesalahan Koneksi", "Terjadi kesalahan koneksi saat menghapus kategori.");
         }
       }
-    } catch (error) {
-      console.error("Error deleting category:", error);
-      alert("Terjadi kesalahan koneksi saat menghapus kategori.");
-    }
+    );
   };
 
   const openCategoryEditModal = (cat: Category) => {
@@ -1122,6 +1137,83 @@ export default function App() {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+      
+      {/* Custom Alert Modal */}
+      <AnimatePresence>
+        {alertConfig.isOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setAlertConfig(prev => ({ ...prev, isOpen: false }))}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden p-6 text-center"
+            >
+              <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle size={32} />
+              </div>
+              <h3 className="font-bold text-lg mb-2">{alertConfig.title}</h3>
+              <p className="text-sm text-slate-500 mb-6 whitespace-pre-wrap">{alertConfig.message}</p>
+              <button 
+                onClick={() => setAlertConfig(prev => ({ ...prev, isOpen: false }))}
+                className="w-full bg-slate-900 text-white font-bold py-3 rounded-2xl hover:bg-slate-800 transition-all"
+              >
+                Tutup
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Custom Confirm Modal */}
+      <AnimatePresence>
+        {confirmConfig.isOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden p-6 text-center"
+            >
+              <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Trash2 size={32} />
+              </div>
+              <h3 className="font-bold text-lg mb-2">{confirmConfig.title}</h3>
+              <p className="text-sm text-slate-500 mb-6">{confirmConfig.message}</p>
+              <div className="grid grid-cols-2 gap-3">
+                <button 
+                  onClick={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))}
+                  className="w-full bg-slate-100 text-slate-600 font-bold py-3 rounded-2xl hover:bg-slate-200 transition-all"
+                >
+                  Batal
+                </button>
+                <button 
+                  onClick={() => {
+                    confirmConfig.onConfirm();
+                    setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+                  }}
+                  className="w-full bg-rose-500 text-white font-bold py-3 rounded-2xl hover:bg-rose-600 transition-all"
+                >
+                  Hapus
+                </button>
+              </div>
             </motion.div>
           </div>
         )}
