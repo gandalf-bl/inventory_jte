@@ -249,9 +249,13 @@ export default function App() {
         setEditingLocation(null);
         setNewLocationName('');
         fetchData();
+      } else {
+        const err = await response.json();
+        alert(err.error || 'Gagal menyimpan lokasi');
       }
     } catch (error) {
       console.error("Error saving location:", error);
+      alert("Terjadi kesalahan koneksi saat menyimpan lokasi.");
     }
   };
 

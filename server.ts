@@ -101,6 +101,12 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Request logger
+  app.use((req, res, next) => {
+    console.log(`${req.method} ${req.url}`);
+    next();
+  });
+
   app.use(express.json({ limit: '10mb' }));
 
   // Serve images
@@ -118,9 +124,20 @@ async function startServer() {
   });
 
   app.post("/api/locations", (req, res) => {
-    const { name } = req.body;
-    const result = db.prepare("INSERT INTO locations (name) VALUES (?)").run(name);
-    res.json({ id: result.lastInsertRowid });
+    try {
+      const { name } = req.body;
+      if (!name) {
+        return res.status(400).json({ error: "Nama lokasi wajib diisi." });
+      }
+      const result = db.prepare("INSERT INTO locations (name) VALUES (?)").run(name);
+      res.json({ id: result.lastInsertRowid });
+    } catch (error: any) {
+      console.error("Error creating location:", error);
+      if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+        return res.status(400).json({ error: "Nama lokasi sudah ada." });
+      }
+      res.status(500).json({ error: "Gagal menambah lokasi." });
+    }
   });
 
   app.put("/api/locations/:id", (req, res) => {
@@ -168,9 +185,20 @@ async function startServer() {
   });
 
   app.post("/api/categories", (req, res) => {
-    const { name } = req.body;
-    const result = db.prepare("INSERT INTO categories (name) VALUES (?)").run(name);
-    res.json({ id: result.lastInsertRowid });
+    try {
+      const { name } = req.body;
+      if (!name) {
+        return res.status(400).json({ error: "Nama kategori wajib diisi." });
+      }
+      const result = db.prepare("INSERT INTO categories (name) VALUES (?)").run(name);
+      res.json({ id: result.lastInsertRowid });
+    } catch (error: any) {
+      console.error("Error creating category:", error);
+      if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+        return res.status(400).json({ error: "Nama kategori sudah ada." });
+      }
+      res.status(500).json({ error: "Gagal menambah kategori." });
+    }
   });
 
   app.put("/api/categories/:id", (req, res) => {
